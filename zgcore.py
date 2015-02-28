@@ -22,11 +22,15 @@ def setup():
 	global password
 	global api
 	global noverify
-	logging.debug('Loading global variables')
+	logging.debug('Preloading global variables')
 	username = None
 	password = None
 	api = None
 	noverify = None
+
+	
+	### Load command args here first! ###
+	### If CFG is specified, load it here...else use default config
 	
 	try:
 		defconf = os.getenv("HOME") + "/.zbx.conf"
@@ -36,6 +40,18 @@ def setup():
 		logging.warning('Could not set default config file path. Is $HOME set?')
 
 	cfg=zgconfig(defconf)
+
+	### CMD args should override config file settings ###
+
+	logging.debug("Verifying configured settings:")
+	
+	verifyconfig("username", cfg.username)
+	verifyconfig("password", cfg.password)
+	verifyconfig("api", cfg.api)
+	verifyconfig("noverify", cfg.noverify)
+	verifyconfig("patat", "mayo")
+	
+	
 
 
 class zgconfig:
@@ -53,7 +69,7 @@ class zgconfig:
 				result = settings.get(section, setting)
 				if result:
 					if setting == "password":
-						logging.debug(" - [%s] Found password", section)
+						logging.debug(" - [%s] Found %s", section, setting)
 					else:
 						logging.debug(" - [%s] Found %s \"%s\"",section, setting, result)
 					return result
@@ -66,45 +82,89 @@ class zgconfig:
 		self.password=None
 		self.api=None
 		self.noverify=None
-	
+		self.delimiter=None
+		self.enclose=None	
 
 		# ...Then try to override them from the specified config file.
 		logging.debug("Trying to access config file \"%s\"", cfgfile)
-		if os.path.isfile(cfgfile) and os.access(cfgfile, os.R_OK):
-			logging.debug("Loading config from \"%s\"", cfgfile)
- 			settings=ConfigParser.ConfigParser()
-			settings.read(cfgfile)
+		try:
+			if os.path.isfile(cfgfile) and os.access(cfgfile, os.R_OK):
+				logging.debug("Loading config from \"%s\"", cfgfile)
+ 				settings=ConfigParser.ConfigParser()
+				settings.read(cfgfile)
+			
+				self.username=loadsetting('Zabbix API','username')
+				self.password=loadsetting('Zabbix API','password')
+				self.api=loadsetting('Zabbix API','api')
+				self.noverify=loadsetting('Zabbix API','no_verify')
+
+				self.delimiter=loadsetting('Output','delimiter')
+				self.enclose=loadsetting('Output','enclose')
 		
-			self.username=loadsetting('Zabbix API','username')
-			self.password=loadsetting('Zabbix API','password')
-			self.api=loadsetting('Zabbix API','api')
-			self.noverify=loadsetting('Zabbix API','no_verify')
+				logging.info("Loaded config file \"%s\"", cfgfile)
+			else:
+				logging.info("Could not load config file \"%s\"", cfgfile)
 		
-			logging.info("Config file \"%s\" is loaded", cfgfile)
-		else:
-			logging.info("Config file \"%s\" is not loadable", cfgfile)
+		except:
+			logging.info("Could not load config file \"%s\"", cfgfile)
 		return
+		
 
 
 
 
+def verifyconfig(setting, var):
+	def returntrue():	
+		logging.debug(" - \"%s\" is valid", setting)
+		return True
 
-def verifyconfig():
-#                                        apiurl=urlparse.urlsplit(settings.get('Zabbix API','api'))
-#                                        if (apiurl.scheme == "http") or (apiurl.scheme == "https"):
-#                                                self.api=apiurl.geturl()
-#                                                logging.debug(" - Found Zabbix API URL: \"%s\"", self.api)
-#                                except:
-#                                        self.api=None
-#
-#                                try:
-#                                        self.noverify=bool(distutils.util.strtobool(settings.get('Zabbix API','no_verify')))
-#                                        if self.noverify:
-#                                                logging.debug(" - Found \"no_verify\" setting (%s)", str(self.noverify))
-#
-#
-#
-	return	
+	def returnfalse(reason):
+		logging.debug(" - \"%s\" is %s", setting, reason)
+		return False
+
+	# Test input for validity. 	
+	if (setting == "username") or (setting == "password") or (setting == "api") or (setting == "noverify") :
+		if (setting == "username"):
+			try:
+				if (len(var)>0) and (len(var)<65):
+					returntrue()
+				else:
+					returnfalse("invalid")
+			except:
+				returnfalse("invalid")
+		elif (setting == "password"):
+			try:
+				if (len(var)>0):
+					returntrue()
+				else:
+					returnfalse("invalid")
+			except:
+				returnfalse("invalid")
+		elif (setting == "api"):
+			try:
+				apiurl=urlparse.urlsplit(var)
+				if (apiurl.scheme == "http") or (apiurl.scheme == "https"):
+					returntrue()
+				else:
+					returnfalse("invalid")
+			except:
+				returnfalse("invalid")
+		elif (setting == "noverify"):
+			try:
+				if bool(distutils.util.strtobool(var)):
+					returntrue()
+				else:
+					returnfalse("invalid")
+			except:
+				returnfalse("invalid")
+		else:
+			# The var is not valid.
+			returnfalse("invalid")
+	else:
+		# The var is unknown.
+		returnfalse("unknown")
+		
+
 
 def apilogin():
 	return
